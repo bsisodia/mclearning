@@ -1,0 +1,127 @@
+---
+title: "Pridiction Assignment"
+author: "BS"
+date: "22 November 2015"
+output: html_document
+---
+## Introduction
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, our goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har 
+
+### Data
+
+The training data for this project are available here: 
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here: 
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har. We are thankful to the source providing the data for our project 
+
+### Goal
+The goal of the project is to predict the manner in which users did the exercise. This is the "classe" variable in the training set. 
+## Initialization
+
+### Load Library
+``` {r,message=FALSE}
+# Load libraries required for the assignment
+library(caret)
+library(randomForest)
+library(corrplot)
+```
+
+### Create Output file generation function
+``` {r}
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("./data/problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+```
+
+### Set Seed value for reproducibility
+```{r}
+set.seed(1221)
+```
+
+### Download training and test data. 
+Create folder if needed
+```{r}
+if(!file.exists("data")) {
+  dir.create("data")
+}
+
+trainingDataURL<-'http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv'
+testDataURL<-'http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv'
+trainingFile<-'./data/pml-training.csv'
+testFile<-'./data/pml-testing.csv'
+if(!file.exists(trainingFile)) {download.file(trainingDataURL, destfile=trainingFile)}
+if(!file.exists(testFile)) {download.file(testDataURL, destfile=testFile)}
+```
+
+### Prepare training data set
+Read training data
+```{r}
+trainDataRaw<-read.csv(trainingFile,na.strings=c("NA",""," "))
+```
+
+Clean data by removing columns where we have NA & empty values.
+```{r}
+trainDataNA<-apply(trainDataRaw,2,function(x){sum(is.na(x))})
+trainData<-trainDataRaw[,which(trainDataNA==0)]
+```
+Remove first 7 columns as those are not having data useful for prediction (user name, timestamp, date,..)
+```{r}
+trainData<-trainData[8:length(trainData)]
+```
+Spliting the trainData into two buckets so that we can use for cross validation
+```{r}
+inTrain<-createDataPartition(y=trainData$classe,p=0.7,list=FALSE)
+training <-trainData[inTrain,]
+crossvalidate<- trainData[-inTrain,]
+```
+
+###Exploratory Analysis
+Prepare correlation matrix
+```{r}
+corMatrix <- cor(training[, -length(training)])
+corrplot(corMatrix, order = "FPC", method = "circle", type = "lower", tl.cex = 0.8,  tl.col = rgb(0, 0, 0))
+```
+
+###Model building
+Fit a model to predict **classe** using all other variables
+```{r}
+model<-randomForest(classe ~ .,data=training)
+model
+```
+
+The model is having OOB estimate of error rate as 0.56% which is good sign.
+
+Perform cross validation 
+```{r}
+predictCV<-predict(model,crossvalidate)
+confusionMatrix(crossvalidate$classe,predictCV)
+```
+The data shows an accuracy of 99.46% which is good
+
+### Apply model on test data
+
+Prepare the test data with similar cleaning 
+```{r}
+testDataRaw<-read.csv(testFile,na.strings=c("NA",""," "))
+testDataNA<-apply(testDataRaw,2,function(x){sum(is.na(x))})
+testData<-testDataRaw[,which(testDataNA==0)]
+testData<-testData[8:length(testData)]
+```
+Apply the model on test data. Convert the factor output to character vector and send to the function to generate output files for each test data
+
+```{r}
+predictTest<-predict(model,testData)
+predictTestVector<-as.character(predictTest)
+pml_write_files(predictTestVector)
+```
+
+### Conclusion
+
+It is possible to predict how well a user did the excercise using provided data and by generating a model
